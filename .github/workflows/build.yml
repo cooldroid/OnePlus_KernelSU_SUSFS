@@ -24,7 +24,11 @@ on:
       kernel_version:
         required: true
         type: string
-  
+      ksun_branch:
+        required: true
+        type: string
+        default: stable
+
 jobs:
   build-kernel-oneplus-kernelsu-susfs:
     runs-on: ubuntu-latest
@@ -45,7 +49,12 @@ jobs:
         run: |
           # Install dependencies
           sudo apt update
-          sudo apt install repo python3 python-is-python3
+          sudo apt install -y python3 python-is-python3
+          
+          mkdir -p ./git-repo
+          curl -sSL https://storage.googleapis.com/git-repo-downloads/repo > ./git-repo/repo
+          chmod a+rx ./git-repo/repo
+          echo "REPO=$GITHUB_WORKSPACE/./git-repo/repo" >> $GITHUB_ENV
 
       - name: Set CONFIG Environment Variable
         run: |
@@ -70,7 +79,7 @@ jobs:
           # Clone repositories using the branch names
           git clone https://github.com/TheWildJames/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
-          git clone https://github.com/TheWildJames/kernel_patches.git
+          git clone https://github.com/cooldroid/kernel_patches.git
 
       - name: Initialize and Sync Kernel Source
         run: |
@@ -80,23 +89,26 @@ jobs:
           
           # Initialize and sync kernel source
           echo "Initializing and syncing kernel source..."
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b ${{ inputs.branch }} -m ${{ inputs.manifest }} --repo-rev=v2.16 --depth=1
+          $REPO init -u https://github.com/OnePlusOSS/kernel_manifest.git -b ${{ inputs.branch }} -m ${{ inputs.manifest }} --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
           
           # Sync repo and apply patches
-          repo --version
-          repo --trace sync -c -j$(nproc --all) --no-tags --fail-fast
+          $REPO --version
+          $REPO sync -c --no-clone-bundle --no-tags --optimized-fetch -j$(nproc --all) --fail-fast
       
-      - name: Add KernelSU
+      - name: Add KernelSU Next
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/kernel_platform"
           
-          echo "Adding KernelSU..."
-          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -
-          #cd ./KernelSU-Next/kernel
-          #sed -i 's/ccflags-y += -DKSU_VERSION=16/ccflags-y += -DKSU_VERSION=12000/' ./Makefile
-          KSU_VERSION=$(cd ./KernelSU-Next/kernel && git describe --tags --abbrev=0)
-          echo "KSUVER=${KSU_VERSION}" >> $GITHUB_ENV
+          echo "Adding KernelSU Next..."
+          
+          if [ "${{ inputs.ksun_branch }}" == "stable" ]; then
+            curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          else
+            curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s ${{ inputs.ksun_branch }}
+          fi
+          
+          git submodule update --init --recursive
 
       - name: Apply SUSFS Patches
         run: |
@@ -112,19 +124,49 @@ jobs:
 
           cd ./KernelSU-Next
           
-          echo "Applying next SUSFS patches..."
-          cp ../../../kernel_patches/next/kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./
-          patch -p1 --forward < kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch || true
+          if [ "${{ inputs.ksun_branch }}" == "stable" ] || [ "${{ inputs.ksun_branch }}" == "next" ]; then
+            echo "Applying next SUSFS patches..."
+            cp ../../../kernel_patches/next/kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./ksun_susfs_latest.patch
+            patch -p1 --forward < ksun_susfs_latest.patch || true
+          fi
           
+          # Determine base version based on branch
+          if [ "${{ inputs.ksun_branch }}" == "stable" ]; then
+            BASE_VERSION=10200
+          elif [ "${{ inputs.ksun_branch }}" == "next" ]; then
+            BASE_VERSION=10200
+          elif [ "${{ inputs.ksun_branch }}" == "next-susfs" ]; then
+            BASE_VERSION=10198
+          elif [ "${{ inputs.ksun_branch }}" == "next-susfs-dev" ]; then
+            BASE_VERSION=10198
+          else
+            BASE_VERSION=10200
+          fi
+          
+          echo "Applying next Manager patches..."
+          cp ../../../kernel_patches/next/manager.patch ./
+          patch -p1 --forward < manager.patch || true
+          
+          cd ./kernel
+          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" $BASE_VERSION)
+          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+          sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
+
           # Change to common directory and apply SUSFS patch
-          cd ../common
+          cd ../../common
           patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
 
-      - name: Apply KSU Hooks
+          if [ "${{ inputs.ksun_branch }}" == "next-susfs-dev" ]; then
+          	sed -i '/#define CMD_SUSFS_ADD_SUS_MOUNT 0x55560/a #define CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS 0x55561' ./include/linux/susfs_def.h
+          	sed -i '/#include "internal.h"/a #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\nextern bool susfs_is_current_ksu_domain(void);\nbool susfs_hide_sus_mnts_for_all_procs = true;\n#endif' ./fs/proc_namespace.c
+          	perl -pi -e 's{if \(unlikely\(r->mnt_id >= DEFAULT_SUS_MNT_ID\)\)}{if (unlikely(r->mnt_id >= DEFAULT_SUS_MNT_ID) && (susfs_hide_sus_mnts_for_all_procs || !susfs_is_current_ksu_domain()))}' ./fs/proc_namespace.c
+          fi
+
+      - name: Apply KSUN Hooks
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/kernel_platform/common"
-          # Apply additional patch
+          echo "Applying KSUN Hooks..."
           cp ../../../kernel_patches/next/syscall_hooks.patch ./
           patch -p1 --fuzz=3 < ./syscall_hooks.patch
           
@@ -169,6 +211,22 @@ jobs:
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
 
+          # Add additional config setting
+          echo "CONFIG_IP_NF_TARGET_TTL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_TARGET_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_MATCH_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
+
+          # Add BBR Config
+          echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig 
+          echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NET_SCH_FQ=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_BIC=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_WESTWOOD=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_HTCP=n" >> ./common/arch/arm64/configs/gki_defconfig 
+
+          # Remove check_defconfig
+          sed -i 's/check_defconfig//' ./common/build.config.gki
+
       - name: Run sed and perl Commands
         run: |
           echo "Changing to configuration directory: $CONFIG..."
@@ -182,9 +240,9 @@ jobs:
           
           # Run sed commands for modifications
           sed -i 's/check_defconfig//' ./common/build.config.gki
-          sed -i '$s|echo "\$res"|echo "\$res-Wild+"|' ./common/scripts/setlocalversion
-          sed -i '$s|echo "\$res"|echo "\$res-Wild+"|' ./msm-kernel/scripts/setlocalversion
-          sed -i '$s|echo "\$res"|echo "\$res-Wild+"|' ./external/dtc/scripts/setlocalversion
+          sed -i '$s|echo "\$res"|echo "-android13-8-o-01126-gcdbf7c7b49c7"|' ./common/scripts/setlocalversion
+          sed -i '$s|echo "\$res"|echo "-android13-8-o-01126-gcdbf7c7b49c7"|' ./msm-kernel/scripts/setlocalversion
+          sed -i '$s|echo "\$res"|echo "-android13-8-o-01126-gcdbf7c7b49c7"|' ./external/dtc/scripts/setlocalversion
           sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl || echo "No stamp.bzl!"
           sed -i 's/-dirty//' ./common/scripts/setlocalversion
           sed -i 's/-dirty//' ./msm-kernel/scripts/setlocalversion
@@ -195,8 +253,8 @@ jobs:
           sed -i 's/export REPACK_IMG=true/export REPACK_IMG=false/g' ./oplus/build/oplus_setup.sh
          
           # Run perl command to modify UTS_VERSION
-          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Sat Apr 20 04:20:00 UTC 2024"}' ./common/scripts/mkcompile_h
-          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Sat Apr 20 04:20:00 UTC 2024"}' ./msm-kernel/scripts/mkcompile_h
+          #perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 05 04:20:00 UTC 2025"}' ./common/scripts/mkcompile_h
+          #perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 05 04:20:00 UTC 2025"}' ./msm-kernel/scripts/mkcompile_h
 
       - name: Build the Kernel
         run: |
@@ -204,6 +262,9 @@ jobs:
           cd "$CONFIG"
           
           echo "Building the kernel..."
+          # Clear Cache
+          sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'
+          
           rm ./kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           rm ./kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
           #git config --global user.email "bins4us@hotmail.com"
@@ -221,7 +282,7 @@ jobs:
               --ignore_missing_projects \
               -o "$(pwd)/out"
           else
-            ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ inputs.soc }} gki
+            LTO=thin ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ inputs.soc }} gki
           fi
 
       - name: Copy Images
