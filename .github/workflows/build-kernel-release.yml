@@ -24,7 +24,20 @@ on:
         default: stable
 
 jobs:
+  build-kernel-op11:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      model: "OP11"
+      soc: "kalama"
+      branch: "oneplus/sm8550"
+      manifest: "oneplus_11_v.xml"
+      android_version: "android13"
+      kernel_version: "5.15"
+      ksun_branch: ${{ inputs.ksun_branch }}
+
   build-batch-1: # Non Bazel Builds
+    if: false
     name: build-batch-1 (${{ matrix.model }}, ${{ matrix.soc }}, ${{ matrix.branch }}, ${{ matrix.manifest }}, ${{ matrix.android_version }}, ${{ matrix.kernel_version }}, ${{ inputs.ksun_branch }})
     strategy:
       fail-fast: false
@@ -84,6 +97,7 @@ jobs:
       ksun_branch: ${{ inputs.ksun_branch }}
 
   build-batch-2:
+    if: false
     # needs: build-batch-1
     name: build-batch-2 (${{ matrix.model }}, ${{ matrix.soc }}, ${{ matrix.branch }}, ${{ matrix.manifest }}, ${{ matrix.android_version }}, ${{ matrix.kernel_version }}, ${{ inputs.ksun_branch }})
     strategy:
@@ -145,15 +159,16 @@ jobs:
 
   trigger-release:
     needs:
-      - build-batch-1
-      - build-batch-2
+      - build-kernel-op11
+      # - build-batch-1
+      # - build-batch-2
     runs-on: ubuntu-latest
     if: ${{ inputs.make_release }}
     env:
       REPO_OWNER: ${{ github.repository_owner }}
       REPO_NAME: ${{ github.event.repository.name }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      RELEASE_NAME: "*TEST BUILD* OnePlus Kernels With KernelSU Next & SUSFS v1.5.7 *TEST BUILD*"
+      RELEASE_NAME: "OnePlus Kernels With KernelSU Next & SUSFS v1.5.7"
       RELEASE_NOTES: |
         This release contains KernelSU Next and SUSFS v1.5.7
         
@@ -173,7 +188,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Generate and Create New Tag
         run: |
