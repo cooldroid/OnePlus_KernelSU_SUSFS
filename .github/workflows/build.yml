@@ -240,9 +240,9 @@ jobs:
           
           # Run sed commands for modifications
           sed -i 's/check_defconfig//' ./common/build.config.gki
-          sed -i '$s|echo "\$res"|echo "-android13-8-o-01126-gcdbf7c7b49c7"|' ./common/scripts/setlocalversion
-          sed -i '$s|echo "\$res"|echo "-android13-8-o-01126-gcdbf7c7b49c7"|' ./msm-kernel/scripts/setlocalversion
-          sed -i '$s|echo "\$res"|echo "-android13-8-o-01126-gcdbf7c7b49c7"|' ./external/dtc/scripts/setlocalversion
+          sed -i '$s|echo "\$res"|echo "-android13-8-o-01128-g94a8ad9b8ede"|' ./common/scripts/setlocalversion
+          sed -i '$s|echo "\$res"|echo "-android13-8-o-01128-g94a8ad9b8ede"|' ./msm-kernel/scripts/setlocalversion
+          sed -i '$s|echo "\$res"|echo "-android13-8-o-01128-g94a8ad9b8ede"|' ./external/dtc/scripts/setlocalversion
           sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl || echo "No stamp.bzl!"
           sed -i 's/-dirty//' ./common/scripts/setlocalversion
           sed -i 's/-dirty//' ./msm-kernel/scripts/setlocalversion
@@ -253,8 +253,8 @@ jobs:
           sed -i 's/export REPACK_IMG=true/export REPACK_IMG=false/g' ./oplus/build/oplus_setup.sh
          
           # Run perl command to modify UTS_VERSION
-          #perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 05 04:20:00 UTC 2025"}' ./common/scripts/mkcompile_h
-          #perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 05 04:20:00 UTC 2025"}' ./msm-kernel/scripts/mkcompile_h
+          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Mon Mar 17 06:48:36 UTC 2025"}' ./common/scripts/mkcompile_h
+          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Mon Mar 17 06:48:36 UTC 2025"}' ./msm-kernel/scripts/mkcompile_h
 
       - name: Build the Kernel
         run: |
