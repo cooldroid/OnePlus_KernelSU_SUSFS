@@ -101,7 +101,7 @@ jobs:
           # Clone repositories using the branch names
           git clone https://github.com/TheWildJames/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
-          git clone https://github.com/TheWildJames/kernel_patches.git
+          git clone https://github.com/cooldroid/kernel_patches.git
 
       - name: Initialize and Sync Kernel Source
         run: |
@@ -115,7 +115,7 @@ jobs:
           
           # Sync repo and apply patches
           $REPO --version
-          $REPO --trace sync -c --no-clone-bundle --no-tags --optimized-fetch -j$(nproc --all) --fail-fast
+          $REPO sync -c --no-clone-bundle --no-tags --optimized-fetch -j$(nproc --all) --fail-fast
       
       - name: Add KernelSU Next
         run: |
@@ -176,6 +176,22 @@ jobs:
             sed -i '/#include <trace\/hooks\/blk.h>/a #include <trace/hooks/fs.h>' ./fs/namespace.c
           fi
           patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
+
+      - name: Apply manager signature patch
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/kernel_platform/KernelSU-Next"
+          echo "Applying manager signature patch..."
+          cp ../../../kernel_patches/next/manager.patch ./
+          patch -p1 --fuzz=3 < ./manager.patch
+
+      - name: Apply hide_sus_mnts patch
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/kernel_platform/common"
+          echo "Applying hide_sus_mnts patch..."
+          cp ../../../kernel_patches/next/hide_sus_mnts.patch ./
+          patch -p1 --fuzz=3 < ./hide_sus_mnts.patch
 
       - name: Apply KSUN Hooks
         run: |
@@ -264,9 +280,10 @@ jobs:
           
           # Run sed commands for modifications
           sed -i 's/check_defconfig//' ./common/build.config.gki
-          sed -i '$s|echo "\$res"|echo "\$res-Wild"|' ./common/scripts/setlocalversion
-          sed -i '$s|echo "\$res"|echo "\$res-Wild"|' ./msm-kernel/scripts/setlocalversion
-          sed -i '$s|echo "\$res"|echo "\$res-Wild"|' ./external/dtc/scripts/setlocalversion
+          VERSTR="-android13-8-o-01129-ge18cb30c399f"
+          sed -i '$s|echo "\$res"|echo $VERSTR|' ./common/scripts/setlocalversion
+          sed -i '$s|echo "\$res"|echo $VERSTR|' ./msm-kernel/scripts/setlocalversion
+          sed -i '$s|echo "\$res"|echo $VERSTR|' ./external/dtc/scripts/setlocalversion
           sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl || echo "No stamp.bzl!"
           sed -i 's/-dirty//' ./common/scripts/setlocalversion
           sed -i 's/-dirty//' ./msm-kernel/scripts/setlocalversion
