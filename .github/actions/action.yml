@@ -653,7 +653,7 @@ runs:
         echo "::group::Add BBG LSM"
         cd "$CONFIG/kernel_platform"
         echo "Adding BBG..."
-        if ! wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash; then
+        if ! wget -O- https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash; then
           echo "::warning::BBG setup script failed, continuing anyway"
         fi
         echo "CONFIG_BBG=y" >> common/arch/arm64/configs/gki_defconfig
@@ -712,13 +712,13 @@ runs:
         cd "$CONFIG/kernel_platform"
         echo "Adding KernelSU..."
         if [ "${{ inputs.ksu_branch_or_hash }}" = "" ]; then
-          curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+          curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KOWX712/KernelSU/master/kernel/setup.sh" | bash -
         else
-          curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s "${{ inputs.ksu_branch_or_hash }}"
+          curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KOWX712/KernelSU/master/kernel/setup.sh" | bash -s "${{ inputs.ksu_branch_or_hash }}"
         fi
         git submodule update --init --recursive
         cd KernelSU/kernel
-        BASE_VERSION=20000
+        BASE_VERSION=30000
         KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" $BASE_VERSION)
         sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" Makefile
         
@@ -816,7 +816,7 @@ runs:
               patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
               patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
             else
-              patch -p1 --forward < 10_enable_susfs_for_ksu.patch
+              curl -Ls https://raw.githubusercontent.com/cooldroid/kernel_patches/main/kowksu/10_enable_susfs_for_ksu.patch | patch -p1 --forward
             fi
             ;;
           *)
@@ -862,6 +862,7 @@ runs:
         fi
         
         patch -p1 < 50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch
+        curl -Ls https://raw.githubusercontent.com/cooldroid/kernel_patches/main/kowksu/50_susfs4ksu_revert_avc_spoofing.patch | patch -p1 --forward
         
         # Revert Fake kernel patch
         if [ "$fake_patched" = 1 ]; then
@@ -1083,7 +1084,7 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         cd "$KERNEL_PATH/common"
         mkdir -p out
-        CUSTOM_LOCALVERSION="-${ANDROID_VER}-OP-Wild"
+        CUSTOM_LOCALVERSION="-${ANDROID_VER}-8-o-01155-ga71f0d7db4db"
         echo "CUSTOM_LOCALVERSION=$CUSTOM_LOCALVERSION" >> "$GITHUB_ENV"
         echo "::endgroup::"
 
@@ -1126,7 +1127,7 @@ runs:
         source "$KERNEL_PATH/build/kernel/_setup_env.sh" 2>/dev/null || true
         set -u
         
-        KERNEL_BUILD_DATE=$(date -u)
+        KERNEL_BUILD_DATE='Fri Sep 19 12:00:24 UTC 2025'
         export SOURCE_DATE_EPOCH=$COMMIT_TIMESTAMP
         export KBUILD_BUILD_TIMESTAMP="$KERNEL_BUILD_DATE"
         export KBUILD_BUILD_USER="${BUILD_USER:-kernel}"
