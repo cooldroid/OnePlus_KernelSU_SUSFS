@@ -28,12 +28,12 @@ on:
           - android14-6.1
           - android13-5.15
           - android12-5.10
-        default: OOS14+15+16
+        default: OOS16
       ksu_options:
         description: 'Enter KernelSU build json'
         required: true
         type: string
-        default: '[{"type":"ksun","hash":"dev"}]'
+        default: '[{"type":"ksu","hash":"master"}]'
       optimize_level:
         description: "Compiler optimization level"
         required: true
@@ -42,6 +42,11 @@ on:
         default: O2
       clean_build:
         description: 'Clean build (no ccache)'
+        type: boolean
+        default: false
+      add_susfs:
+        description: 'Build with SUSFS?'
+        required: true
         type: boolean
         default: false
       android12-5_10_susfs_branch_or_commit:
@@ -118,7 +123,7 @@ jobs:
               jq_filter="map(select(.os_version == \"OOS14\" or .os_version == \"OOS15\"))"
               ;;
             OOS16)
-              jq_filter="map(select(.os_version == \"OOS16\"))"
+              jq_filter="map(select((.os_version == \"OOS16\") and .model == \"OP11\"))"
               ;;
             OOS15)
               jq_filter="map(select(.os_version == \"OOS15\"))"
@@ -143,6 +148,9 @@ jobs:
           esac
           
           filtered=$(jq -c "$jq_filter" matrix.json)
+          if [ "${{ github.event.inputs.add_susfs }}" = "false" ]; then
+            filtered=$(jq 'map(.susfs |= false)' <<<"$filtered")
+          fi
           count=$(jq 'length' <<<"$filtered")
           
           if [ "$count" -eq 0 ]; then

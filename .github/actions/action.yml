@@ -481,13 +481,13 @@ runs:
         
         CACHE_DIR="$HOME/.ccache"
         echo "CCACHE_DIR=$CACHE_DIR" >> "$GITHUB_ENV"
-        echo "CCACHE_MAXSIZE=1G" >> "$GITHUB_ENV"
+        echo "CCACHE_MAXSIZE=10G" >> "$GITHUB_ENV"
         
         mkdir -p "$CACHE_DIR"
         
         echo "Cache configuration:"
         echo "  Directory: $CACHE_DIR"
-        echo "  Max size: 1G"
+        echo "  Max size: 10G"
         echo "  Android: ${ANDROID_VER:-unknown}"
         echo "  Kernel: ${KERNEL_VER:-unknown}"
         echo "  OOS Version: ${OP_OS_VERSION:-unknown}"
@@ -511,7 +511,7 @@ runs:
         echo "::group::Configure ccache for maximum performance"
         
         export CCACHE_DIR="$HOME/.ccache"
-        export CCACHE_MAXSIZE="1G"
+        export CCACHE_MAXSIZE="10G"
         
         ccache -M "$CCACHE_MAXSIZE"
         
@@ -755,13 +755,13 @@ runs:
         cd "$KERNEL_PLATFORM_FOLDER"
         echo "Adding KernelSU..."
         if [ "${{ inputs.ksu_branch_or_hash }}" = "" ]; then
-          curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+          curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KOWX712/KernelSU/master/kernel/setup.sh" | bash -
         else
-          curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s "${{ inputs.ksu_branch_or_hash }}"
+          curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KOWX712/KernelSU/master/kernel/setup.sh" | bash -s "${{ inputs.ksu_branch_or_hash }}"
         fi
         git submodule update --init --recursive
         cd KernelSU/kernel
-        BASE_VERSION=20000
+        BASE_VERSION=30000
         KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" $BASE_VERSION)
         sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" Makefile
         
@@ -848,7 +848,7 @@ runs:
               patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
             else
               cd "$KSU_FOLDER"
-              patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+              curl -Ls https://raw.githubusercontent.com/cooldroid/kernel_patches/main/kowksu/10_enable_susfs_for_ksu.patch | patch -p1 --forward -F3
             fi
             ;;
           *)
@@ -894,6 +894,7 @@ runs:
         fi
         
         patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch"
+        curl -Ls https://raw.githubusercontent.com/cooldroid/kernel_patches/main/kowksu/50_susfs4ksu_revert_avc_spoofing.patch | patch -p1 --forward
         
         # Revert Fake kernel patch
         if [ "$fake_patched" = 1 ]; then
@@ -1192,7 +1193,7 @@ runs:
         source "$KERNEL_PLATFORM_FOLDER/build/kernel/_setup_env.sh" 2>/dev/null || true
         set -u
         
-        KERNEL_BUILD_DATE=$(date -u)
+        KERNEL_BUILD_DATE="${OP_KDATE:-$(date -u)}"
         export SOURCE_DATE_EPOCH=$COMMIT_TIMESTAMP
         export KBUILD_BUILD_TIMESTAMP="$KERNEL_BUILD_DATE"
         export KBUILD_BUILD_USER="${BUILD_USER:-kernel}"
